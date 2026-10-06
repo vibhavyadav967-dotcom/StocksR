@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import requests
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 try:
-    API_URL = st.secrets.get('API_URL', 'http://localhost:8000')
-except Exception:
-    API_URL = 'http://localhost:8000'
+    API_URL = os.getenv('API_URL') or st.secrets.get('API_URL', 'http://localhost:8000')
+except StreamlitSecretNotFoundError:
+    API_URL = os.getenv('API_URL', 'http://localhost:8000')
 API_URL = API_URL.rstrip('/')
 
 st.set_page_config(page_title='AI Stock Recommendation Dashboard', layout='wide')
