@@ -1,0 +1,214 @@
+{
+  "name": "AI Stock Recommendation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "interval",
+              "value": "1",
+              "unit": "hours"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "symbols",
+              "value": "AAPL,MSFT,NVDA,GOOGL,AMZN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "load-symbols",
+      "name": "Load Stock Symbols",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const symbols = $json.symbols.split(',');\nconst items = symbols.map((symbol) => ({ json: { symbol: symbol.trim() } }));\nreturn items;"
+      },
+      "id": "loop-symbols",
+      "name": "Loop Through Stocks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://api:8000/api/stocks/{{$json.symbol}}/analysis",
+        "options": {},
+        "sendBody": false,
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "id": "fetch-analysis",
+      "name": "HTTP Request to FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "recommendations",
+        "columns": "symbol, recommendation, final_score, technical_score, sentiment_score, confidence, explanation",
+        "connectionType": "postgres",
+        "query": "INSERT INTO recommendations (symbol, recommendation, final_score, technical_score, sentiment_score, confidence, explanation) VALUES ($1, $2, $3, $4, $5, $6, $7);",
+        "additionalFields": {}
+      },
+      "id": "save-postgres",
+      "name": "Save Result to PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $json;\nreturn [{ json: { message: `📊 AI STOCK MARKET REPORT\n\n${item.symbol}\nRecommendation: ${item.recommendation}\nConfidence: ${Math.round(item.confidence * 100)}%\nPrice: $${item.price}\nFinal Score: ${item.final_score}\nReason: ${item.reason}` } }];"
+      },
+      "id": "format-telegram",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "id": "send-telegram",
+      "name": "Send Telegram Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_FROM }}",
+        "toEmail": "={{ $env.ALERT_EMAIL }}",
+        "subject": "AI Stock Report",
+        "text": "={{ $json.message }}",
+        "html": "<h2>AI Stock Market Report</h2><p>{{ $json.message }}</p><p>Educational use only. Not financial advice.</p>"
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Stock Symbols",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Stock Symbols": {
+      "main": [
+        [
+          {
+            "node": "Loop Through Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Through Stocks": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request to FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request to FastAPI": {
+      "main": [
+        [
+          {
+            "node": "Save Result to PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Result to PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Format Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Report": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
